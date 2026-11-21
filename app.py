@@ -11,7 +11,7 @@ st.set_page_config(
     page_title="EcoSync | Carbon Footprint & Action Engine",
     page_icon="🌿",
     layout="centered",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 
@@ -157,6 +157,15 @@ st.markdown("""
         font-weight: 700;
         border-radius: 10px;
         border: 1px solid #74c69d;
+    }
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0b1c15 0%, #10251d 100%);
+        border-right: 1px solid #2d6a4f;
+    }
+    section[data-testid="stSidebar"] div.stButton > button {
+        justify-content: flex-start;
+        border-radius: 10px;
+        text-align: left;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -510,41 +519,37 @@ if current_page in CALC_PAGES:
 else:
     section = current_page  # "methodology" or "sources"
 
-# ---------- TOP NAVIGATION BAR (very top of the site): Calculator | Methodology | Sources | Guide ----------
-top1, top2, top3, top4 = st.columns([1.3, 1.4, 1.1, 0.9])
-with top1:
-    if st.button(
-        "🧮 Calculator",
-        key="top_calc",
-        type="primary" if section == "calculator" else "secondary",
-        **BTN
-    ):
-        target = st.session_state.get("last_calc_page", "input")
-        if target in ("results", "simulator") and not has_results:
-            target = "input"
-        st.session_state["page"] = target
-        st.rerun()
-with top2:
-    if st.button(
-        "📐 Methodology",
-        key="top_method",
-        type="primary" if section == "methodology" else "secondary",
-        **BTN
-    ):
-        st.session_state["page"] = "methodology"
-        st.rerun()
-with top3:
-    if st.button(
-        "🔗 Sources",
-        key="top_sources",
-        type="primary" if section == "sources" else "secondary",
-        **BTN
-    ):
-        st.session_state["page"] = "sources"
-        st.rerun()
-with top4:
-    if st.button("❓ Guide", key="top_guide", **BTN):
-        show_onboarding_popup()
+# ---------- SIDEBAR NAVIGATION: Calculator | Results | What-If | Methodology | Sources ----------
+NAV_ITEMS = [
+    # (button label, page key, needs results first?)
+    ("🧮 Calculator", "input", False),
+    ("📊 Results", "results", True),
+    ("⚡ What-If Simulator", "simulator", True),
+    ("📐 Methodology", "methodology", False),
+    ("🔗 Sources", "sources", False),
+]
+
+with st.sidebar:
+    st.markdown("## 🌿 EcoSync")
+    st.caption("Navigate through the app")
+    for label, target, needs_results in NAV_ITEMS:
+        if st.button(
+            label,
+            key=f"side_{target}",
+            type="primary" if current_page == target else "secondary",
+            disabled=needs_results and not has_results,
+            **BTN
+        ):
+            st.session_state["page"] = target
+            st.rerun()
+    st.divider()
+    if st.button("❓ How to use", key="side_guide", **BTN):
+        st.session_state["show_guide"] = True
+    st.caption("Calculate first to unlock Results & What-If.")
+
+# Open the guide pop-up outside the sidebar (safer across Streamlit versions)
+if st.session_state.pop("show_guide", False):
+    show_onboarding_popup()
 
 # ---------- HERO ----------
 st.markdown("""
