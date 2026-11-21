@@ -10,7 +10,7 @@ import streamlit as st
 st.set_page_config(
     page_title="EcoSync | Carbon Footprint & Action Engine",
     page_icon="🌿",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded"
 )
 
@@ -34,140 +34,273 @@ DL = _full_width(st.download_button)
 # st.dialog (new) or st.experimental_dialog (older versions)
 _dialog = getattr(st, "dialog", None) or getattr(st, "experimental_dialog")
 
-# --- CUSTOM HACKATHON THEME ---
+# --- ECOSYNC DARK EDITORIAL THEME ---
 st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(135deg, #091510 0%, #10251d 55%, #0b1c15 100%);
-        color: #e8f5e9;
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root {
+    --bg: #080d0b;
+    --surface: #101915;
+    --surface-2: #14211b;
+    --surface-3: #1a2a22;
+    --line: rgba(173, 205, 183, .13);
+    --text: #edf5ef;
+    --muted: #91a69a;
+    --accent: #b8f36b;
+    --accent-2: #75d6a2;
+    --warning: #e9bd68;
+}
+
+html, body, [class*="css"] {
+    font-family: 'DM Sans', sans-serif;
+}
+.stApp {
+    background:
+        radial-gradient(ellipse at 82% 0%, rgba(90, 151, 104, .13), transparent 32%),
+        radial-gradient(ellipse at 0% 28%, rgba(184, 243, 107, .055), transparent 27%),
+        linear-gradient(145deg, #080d0b 0%, #0b120f 52%, #0a100d 100%);
+    color: var(--text);
+}
+.stApp:before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: .16;
+    background-image: radial-gradient(rgba(210,235,215,.22) .55px, transparent .55px);
+    background-size: 18px 18px;
+    mask-image: linear-gradient(to bottom, black, transparent 72%);
+}
+.block-container, div[data-testid="stMainBlockContainer"] {
+    max-width: 1440px;
+    padding: 2.1rem 3rem 4rem !important;
+}
+h1, h2, h3, h4 {
+    font-family: 'Manrope', sans-serif !important;
+    color: #f3f8f3 !important;
+    letter-spacing: -.035em;
+}
+h1 { font-weight: 800 !important; }
+h2, h3 { font-weight: 750 !important; }
+p, li, label, .stMarkdown { color: #dce8df; }
+small, .stCaption, [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
+hr { border-color: var(--line) !important; }
+
+/* Hero */
+.hero-box {
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 88% 20%, rgba(184,243,107,.18), transparent 25%),
+        linear-gradient(115deg, #17271e 0%, #102019 55%, #13251b 100%);
+    padding: 2rem 2.2rem;
+    border-radius: 24px;
+    border: 1px solid rgba(184,243,107,.23);
+    margin: .15rem 0 1.6rem;
+    box-shadow: 0 24px 70px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.04);
+}
+.hero-box:after {
+    content: "ECOSYNC  /  PERSONAL CLIMATE INTELLIGENCE";
+    position: absolute;
+    right: 2rem;
+    bottom: 1.4rem;
+    color: rgba(210,236,215,.34);
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .17em;
+}
+.hero-box h1 {
+    margin: 0;
+    color: #f4faef;
+    font-family: 'Manrope', sans-serif;
+    font-size: clamp(2.1rem, 4vw, 3.15rem);
+    line-height: 1.1;
+    letter-spacing: -.055em;
+}
+.hero-box p {
+    margin: .65rem 0 0;
+    color: #b5c9b9;
+    font-size: 1rem;
+    letter-spacing: .01em;
+}
+
+/* Step labels and cards */
+.step-badge {
+    display: inline-block;
+    background: rgba(184,243,107,.09);
+    color: var(--accent);
+    padding: .42rem .8rem;
+    border-radius: 999px;
+    font-size: .7rem;
+    font-weight: 800;
+    letter-spacing: .12em;
+    margin-bottom: .8rem;
+    border: 1px solid rgba(184,243,107,.25);
+}
+.tip-card, .guide-row, .score-card {
+    background: linear-gradient(145deg, rgba(24,40,31,.96), rgba(15,26,20,.96));
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.12);
+}
+.tip-card {
+    border-left: 3px solid var(--accent-2);
+    padding: 1.1rem 1.25rem;
+    margin-bottom: .85rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.tip-emoji {
+    font-size: 1.8rem;
+    background: rgba(117,214,162,.1);
+    border: 1px solid rgba(117,214,162,.14);
+    padding: .75rem;
+    border-radius: 14px;
+    min-width: 58px;
+    text-align: center;
+}
+.guide-row {
+    padding: .9rem 1rem;
+    margin-bottom: .7rem;
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+}
+.guide-icon {
+    font-size: 1.65rem;
+    min-width: 40px;
+    text-align: center;
+}
+.score-card {
+    padding: 1.25rem 1.4rem;
+    margin: .7rem 0 .5rem;
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+.score-num {
+    font-family: 'Manrope', sans-serif;
+    font-size: 3.25rem;
+    font-weight: 800;
+    line-height: 1;
+    min-width: 120px;
+    text-align: center;
+}
+.score-num span {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #9db2a2;
+}
+.score-label { font-size: 1.05rem; font-weight: 800; color: #f3f8f3; }
+.score-sub { font-size: .85rem; color: #9db2a2; margin-top: .3rem; }
+
+/* Metric tiles */
+div[data-testid="stMetric"] {
+    background: linear-gradient(145deg, #15231b, #101a15);
+    border: 1px solid var(--line);
+    padding: 1.05rem 1.15rem;
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.15);
+}
+div[data-testid="stMetric"] label {
+    color: #9eb4a3 !important;
+    font-size: .78rem !important;
+    font-weight: 700 !important;
+}
+div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    color: #f1f8ef !important;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800;
+}
+div[data-testid="stMetric"] [data-testid="stMetricDelta"] { font-size: .78rem; }
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0c1510 0%, #0a110d 100%);
+    border-right: 1px solid var(--line);
+}
+section[data-testid="stSidebar"] > div { padding-top: 1.5rem; }
+section[data-testid="stSidebar"] div.stButton > button {
+    justify-content: flex-start;
+    text-align: left;
+    border-radius: 12px;
+    min-height: 2.8rem;
+}
+
+/* Buttons */
+.stButton > button, .stDownloadButton > button,
+.stFormSubmitButton > button, button[kind="primary"] {
+    border-radius: 12px !important;
+    border: 1px solid rgba(184,243,107,.28) !important;
+    font-weight: 700 !important;
+    transition: all .18s ease !important;
+}
+.stButton > button[kind="primary"],
+.stFormSubmitButton > button,
+.stDownloadButton > button[kind="primary"] {
+    background: linear-gradient(110deg, #b8f36b, #8bdc8a) !important;
+    color: #101a12 !important;
+    box-shadow: 0 7px 22px rgba(145,220,105,.13);
+}
+.stButton > button[kind="secondary"],
+.stDownloadButton > button {
+    background: #17241c !important;
+    color: #dceadd !important;
+    border-color: var(--line) !important;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(184,243,107,.65) !important;
+}
+
+/* Inputs */
+div[data-baseweb="input"] > div, div[data-baseweb="select"] > div,
+div[data-baseweb="textarea"] > div {
+    background: #111d16 !important;
+    border: 1px solid rgba(173,205,183,.18) !important;
+    border-radius: 11px !important;
+    color: #eff8ef !important;
+}
+input, textarea { color: #eff8ef !important; }
+div[data-baseweb="popover"], div[data-baseweb="menu"] {
+    background: #142119 !important;
+    border: 1px solid var(--line) !important;
+}
+div[role="radiogroup"] label, div[data-testid="stCheckbox"] label {
+    color: #dce8df !important;
+}
+.stSlider [data-baseweb="slider"] div[role="slider"] {
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+}
+div[data-testid="stExpander"] {
+    background: rgba(18,30,23,.72);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+}
+div[data-testid="stDataFrame"], div[data-testid="stTable"] {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.stProgress > div > div > div > div { background: var(--accent) !important; }
+div[data-testid="stAlert"] { border-radius: 14px; }
+a { color: var(--accent-2) !important; }
+::selection { background: rgba(184,243,107,.28); }
+
+/* Mobile */
+@media (max-width: 800px) {
+    .block-container, div[data-testid="stMainBlockContainer"] {
+        padding: 1.25rem 1rem 3rem !important;
     }
-    .block-container,
-    div[data-testid="stMainBlockContainer"] {
-        padding-top: 2.8rem !important;
-    }
-    .hero-box {
-        background: linear-gradient(120deg, #1b4332, #2d6a4f);
-        padding: 1.3rem 1.8rem;
-        border-radius: 16px;
-        border: 1px solid #52b788;
-        margin-bottom: 1.2rem;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    }
-    .hero-box h1 {
-        margin: 0;
-        color: #ffffff;
-        font-size: 2rem;
-    }
-    .hero-box p {
-        margin: 0.3rem 0 0 0;
-        color: #d8f3dc;
-        font-size: 1rem;
-    }
-    .step-badge {
-        display: inline-block;
-        background-color: #2d6a4f;
-        color: #d8f3dc;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        margin-bottom: 0.5rem;
-        border: 1px solid #52b788;
-    }
-    .tip-card {
-        background: rgba(27, 67, 50, 0.65);
-        border-left: 5px solid #52b788;
-        border-top: 1px solid #40916c;
-        border-right: 1px solid #40916c;
-        border-bottom: 1px solid #40916c;
-        padding: 1rem 1.2rem;
-        border-radius: 12px;
-        margin-bottom: 0.8rem;
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-    .tip-emoji {
-        font-size: 2.3rem;
-        background: rgba(82, 183, 136, 0.2);
-        padding: 0.6rem;
-        border-radius: 12px;
-        min-width: 60px;
-        text-align: center;
-    }
-    .guide-row {
-        background: rgba(45, 106, 79, 0.25);
-        border: 1px solid #40916c;
-        border-radius: 10px;
-        padding: 0.7rem 0.9rem;
-        margin-bottom: 0.6rem;
-        display: flex;
-        align-items: center;
-        gap: 0.9rem;
-    }
-    .guide-icon {
-        font-size: 1.8rem;
-        min-width: 40px;
-        text-align: center;
-    }
-    .score-card {
-        background: rgba(27, 67, 50, 0.65);
-        border: 1px solid #40916c;
-        border-radius: 14px;
-        padding: 1rem 1.3rem;
-        margin: 0.6rem 0 0.4rem 0;
-        display: flex;
-        align-items: center;
-        gap: 1.2rem;
-    }
-    .score-num {
-        font-size: 3rem;
-        font-weight: 800;
-        line-height: 1;
-        min-width: 130px;
-        text-align: center;
-    }
-    .score-num span {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #b7e4c7;
-    }
-    .score-label {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: #ffffff;
-    }
-    .score-sub {
-        font-size: 0.9rem;
-        color: #b7e4c7;
-        margin-top: 0.2rem;
-    }
-    div[data-testid="stMetric"] {
-        background-color: rgba(27, 67, 50, 0.6);
-        border: 1px solid #40916c;
-        padding: 14px;
-        border-radius: 12px;
-    }
-    div.stFormSubmitButton > button,
-    div.stDownloadButton > button,
-    div.stButton > button[kind="primary"] {
-        background: linear-gradient(90deg, #2d6a4f, #40916c);
-        color: white;
-        font-weight: 700;
-        border-radius: 10px;
-        border: 1px solid #74c69d;
-    }
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0b1c15 0%, #10251d 100%);
-        border-right: 1px solid #2d6a4f;
-    }
-    section[data-testid="stSidebar"] div.stButton > button {
-        justify-content: flex-start;
-        border-radius: 10px;
-        text-align: left;
-    }
-    </style>
+    .hero-box { padding: 1.45rem 1.25rem; border-radius: 18px; }
+    .hero-box:after { display: none; }
+    .score-card { align-items: flex-start; gap: .8rem; }
+    .score-num { min-width: 82px; font-size: 2.5rem; }
+}
+</style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
