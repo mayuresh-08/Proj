@@ -300,6 +300,33 @@ a { color: var(--accent-2) !important; }
     .score-card { align-items: flex-start; gap: .8rem; }
     .score-num { min-width: 82px; font-size: 2.5rem; }
 }
+
+/* ---- FIX: dark green text on neon-green (primary) buttons ---- */
+.stButton > button[kind="primary"],
+.stButton > button[kind="primary"] *,
+.stFormSubmitButton > button,
+.stFormSubmitButton > button *,
+.stDownloadButton > button[kind="primary"],
+.stDownloadButton > button[kind="primary"] *,
+button[data-testid="stBaseButton-primary"],
+button[data-testid="stBaseButton-primary"] *,
+button[data-testid="stBaseButton-primaryFormSubmit"],
+button[data-testid="stBaseButton-primaryFormSubmit"] * {
+    color: #0b2415 !important;   /* dark green */
+    font-weight: 700 !important;
+}
+
+/* Keep secondary (dark) buttons light-text */
+button[data-testid="stBaseButton-secondary"],
+button[data-testid="stBaseButton-secondary"] * {
+    color: #dceadd !important;
+}
+
+/* Keep dark text on hover */
+button[data-testid="stBaseButton-primary"]:hover *,
+button[data-testid="stBaseButton-primaryFormSubmit"]:hover * {
+    color: #0b2415 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
