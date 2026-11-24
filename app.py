@@ -1,10 +1,25 @@
-import csv
 import inspect
 import io
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
+
+# PDF generation (install with: pip install reportlab)
+from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import (
+    KeepTogether,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -587,118 +602,260 @@ def make_results(inputs):
     }
 
 
-def build_csv_report(inputs, res):
-    """CSV (Excel / Google Sheets friendly) so the user can tally the totals themselves."""
+# ------------------------------------------------------------------------------
+# PDF REPORT
+# ------------------------------------------------------------------------------
+# Note: ReportLab's built-in fonts have no emoji, rupee sign or subscript glyphs,
+# so the PDF uses plain text ("INR", "CO2" with a <sub> tag) to avoid black boxes.
+PDF_DARK = colors.HexColor("#0e1b14")
+PDF_ACCENT = colors.HexColor("#2d8a4e")
+PDF_LIME = colors.HexColor("#b9f56a")
+PDF_GREY = colors.HexColor("#5b6b61")
+PDF_LIGHT = colors.HexColor("#f1f6f2")
+PDF_LINE = colors.HexColor("#d3ddd5")
+CO2 = "CO<sub>2</sub>"
+
+
+def _pdf_styles():
+    base = getSampleStyleSheet()
+    return {
+        "title": ParagraphStyle("t", parent=base["Title"], fontName="Helvetica-Bold",
+                                fontSize=22, leading=26, textColor=colors.white, alignment=0),
+        "sub": ParagraphStyle("s", parent=base["Normal"], fontName="Helvetica",
+                              fontSize=10, leading=13, textColor=colors.HexColor("#c3d6c9")),
+        "h2": ParagraphStyle("h2", parent=base["Heading2"], fontName="Helvetica-Bold",
+                             fontSize=13, leading=16, textColor=PDF_DARK,
+                             spaceBefore=14, spaceAfter=6),
+        "body": ParagraphStyle("b", parent=base["Normal"], fontName="Helvetica",
+                               fontSize=9.5, leading=13, textColor=colors.HexColor("#26332b")),
+        "cell": ParagraphStyle("c", parent=base["Normal"], fontName="Helvetica",
+                               fontSize=9, leading=12, textColor=colors.HexColor("#26332b")),
+        "cellb": ParagraphStyle("cb", parent=base["Normal"], fontName="Helvetica-Bold",
+                                fontSize=9, leading=12, textColor=PDF_DARK),
+        "head": ParagraphStyle("hd", parent=base["Normal"], fontName="Helvetica-Bold",
+                               fontSize=8.5, leading=11, textColor=colors.white),
+        "score_num": ParagraphStyle("sn", parent=base["Normal"], fontName="Helvetica-Bold",
+                                    fontSize=30, leading=34, alignment=TA_CENTER, textColor=PDF_DARK),
+        "score_lbl": ParagraphStyle("sl", parent=base["Normal"], fontName="Helvetica",
+                                    fontSize=8.5, leading=11, alignment=TA_CENTER, textColor=PDF_GREY),
+        "note": ParagraphStyle("n", parent=base["Normal"], fontName="Helvetica-Oblique",
+                               fontSize=8, leading=11, textColor=PDF_GREY),
+        "tip_title": ParagraphStyle("tt", parent=base["Normal"], fontName="Helvetica-Bold",
+                                    fontSize=10.5, leading=14, textColor=PDF_DARK),
+    }
+
+
+def _pdf_bar_chart(categories, total, width):
+    """Horizontal bar chart as a vector drawing (no image files needed)."""
+    row_h = 20
+    n = len(categories)
+    height = n * row_h + 4
+    label_w, value_w = 80, 120
+    track_w = width - label_w - value_w
+    mx = max(categories.values()) or 1
+
+    d = Drawing(width, height)
+    for i, (name, v) in enumerate(categories.items()):
+        y = height - (i + 1) * row_h + 4
+        share = (v / total * 100) if total > 0 else 0
+        colour = colors.HexColor(CATEGORY_META[name]["color"])
+        d.add(String(0, y + 2, name, fontName="Helvetica-Bold", fontSize=9, fillColor=PDF_DARK))
+        d.add(Rect(label_w, y, track_w, 10, fillColor=PDF_LIGHT, strokeColor=None))
+        d.add(Rect(label_w, y, max(track_w * v / mx, 0.5), 10, fillColor=colour, strokeColor=None))
+        d.add(String(width, y + 2, f"{v:,.0f} kg  ({share:.0f}%)", textAnchor="end",
+                     fontName="Helvetica", fontSize=9, fillColor=PDF_DARK))
+    return d
+
+
+def _pdf_footer(canvas, doc):
+    canvas.saveState()
+    canvas.setFont("Helvetica", 8)
+    canvas.setFillColor(PDF_GREY)
+    canvas.drawString(18 * mm, 10 * mm, "EcoSync - Personal Carbon Footprint Report")
+    canvas.drawRightString(A4[0] - 18 * mm, 10 * mm, f"Page {doc.page}")
+    canvas.restoreState()
+
+
+def build_pdf_report(inputs, res):
+    """Builds a printable PDF report and returns it as bytes."""
+    st_ = _pdf_styles()
     categories = res["categories"]
     total = res["total"]
     score = res["score"]
-    label, _ = score_band(score)
-
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(["Section", "Item", "Value", "Unit", "Share_%"])
-    w.writerow(["Report", "App", "EcoSync - Personal Carbon Footprint Calculator", "", ""])
-    w.writerow(["Report", "Generated", res.get("generated", ""), "", ""])
-
-    # Inputs
-    w.writerow(["Input", "Electricity", inputs["kwh"], "kWh/month", ""])
-    w.writerow(["Input", "LPG cylinders", inputs["cylinders"], "cylinders/month", ""])
-    w.writerow(["Input", "People at home", inputs["people"], "persons", ""])
-    w.writerow(["Input", "Primary travel mode", clean_label(inputs["mode"]), "", ""])
-    w.writerow(["Input", "Weekly distance", inputs["km_per_week"], "km/week", ""])
-    w.writerow(["Input", "Round-trip flights", inputs["flights"], "flights/year", ""])
-    w.writerow(["Input", "Diet", clean_label(inputs["diet"]), "", ""])
-    w.writerow(["Input", "Recycling level", clean_label(inputs["recycle"]), "", ""])
-    w.writerow(["Input", "Shopping spend", inputs["shopping_rs"], "INR/month", ""])
-
-    # Emissions (these rows add up to the TOTAL row)
-    for name, value in categories.items():
-        share = (value / total * 100) if total > 0 else 0
-        w.writerow(["Emission", name, round(value, 2), "kg CO2/year", round(share, 1)])
-    w.writerow(["Emission", "TOTAL (sum of the 6 categories)", round(total, 2), "kg CO2/year",
-                100.0 if total > 0 else 0.0])
-    w.writerow(["Emission", "TOTAL in tonnes", round(total / 1000, 3), "tonnes CO2/year", ""])
-
-    # Comparison & score
-    w.writerow(["Benchmark", "India per-capita average", INDIA_AVERAGE, "kg CO2/year", ""])
-    w.writerow(["Benchmark", "Your footprint vs India average", round(total / INDIA_AVERAGE, 2), "x", ""])
-    w.writerow(["Benchmark", "Trees needed to offset", round(total / TREE_ABSORBS), "trees/year", ""])
-    w.writerow(["Score", "Sustainability Score", score, "out of 100", ""])
-    w.writerow(["Score", "Rating", clean_label(label), "", ""])
-
-    # Factors used (for audit)
-    w.writerow(["Factor", "Electricity", ELECTRICITY_FACTOR, "kg CO2/kWh", ""])
-    w.writerow(["Factor", "LPG", LPG_FACTOR, "kg CO2/cylinder", ""])
-    for mode, factor in TRANSPORT_MAP.items():
-        w.writerow(["Factor", f"Travel - {clean_label(mode)}", factor, "kg CO2/km", ""])
-    w.writerow(["Factor", "Flight", FLIGHT_FACTOR, "kg CO2/round trip", ""])
-    for diet, factor in DIET_MAP.items():
-        w.writerow(["Factor", f"Diet - {clean_label(diet)}", factor, "kg CO2/day", ""])
-    w.writerow(["Factor", "Shopping", SHOPPING_FACTOR, "kg CO2/INR", ""])
-    for rec, factor in RECYCLE_MAP.items():
-        w.writerow(["Factor", f"Recycling - {clean_label(rec)}", factor, "multiplier", ""])
-
-    # utf-8-sig so Excel opens it correctly
-    return buf.getvalue().encode("utf-8-sig")
-
-
-def build_text_report(inputs, res):
-    """Human-readable, printable summary."""
-    categories = res["categories"]
-    total = res["total"]
-    score = res["score"]
-    label, _ = score_band(score)
+    label, score_colour = score_band(score)
     ratio = total / INDIA_AVERAGE
+    trees = round(total / TREE_ABSORBS)
 
-    lines = []
-    lines.append("=" * 62)
-    lines.append("  ECOSYNC - PERSONAL CARBON FOOTPRINT REPORT")
-    lines.append("=" * 62)
-    lines.append(f"Generated : {res.get('generated', '')}")
-    lines.append("")
-    lines.append("YOUR INPUTS")
-    lines.append("-" * 62)
-    lines.append(f"Electricity        : {inputs['kwh']:,.1f} kWh / month")
-    lines.append(f"LPG cylinders      : {inputs['cylinders']:,.1f} / month")
-    lines.append(f"People at home     : {inputs['people']}")
-    lines.append(f"Travel mode        : {clean_label(inputs['mode'])}")
-    lines.append(f"Weekly distance    : {inputs['km_per_week']} km")
-    lines.append(f"Round-trip flights : {inputs['flights']:,.1f} / year")
-    lines.append(f"Diet               : {clean_label(inputs['diet'])}")
-    lines.append(f"Recycling          : {clean_label(inputs['recycle'])}")
-    lines.append(f"Shopping spend     : INR {inputs['shopping_rs']:,.0f} / month")
-    lines.append("")
-    lines.append("EMISSIONS BREAKDOWN (kg CO2 / year)")
-    lines.append("-" * 62)
-    for name, value in categories.items():
-        share = (value / total * 100) if total > 0 else 0
-        lines.append(f"{name:<18} {value:>12,.1f} kg   {share:>5.1f}%")
-    lines.append("-" * 62)
-    lines.append(f"{'TOTAL':<18} {total:>12,.1f} kg   100.0%")
-    lines.append(f"{'':<18} {total / 1000:>12,.3f} tonnes CO2 / year")
-    lines.append("")
-    lines.append("BENCHMARKS")
-    lines.append("-" * 62)
-    lines.append(f"India per-capita average : {INDIA_AVERAGE:,} kg CO2 / year")
-    lines.append(f"You vs India average     : {ratio:.2f}x")
-    lines.append(f"Trees needed to offset   : {round(total / TREE_ABSORBS):,} per year")
-    lines.append("")
-    lines.append(f"SUSTAINABILITY SCORE : {score} / 100  ({clean_label(label)})")
-    lines.append("  Score = 100 x (1 - Total / (2 x India average)), limited to 0-100")
-    lines.append("")
-    lines.append("TOP 3 AREAS TO IMPROVE")
-    lines.append("-" * 62)
+    page_w = A4[0] - 36 * mm  # usable width (18 mm margins)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=18 * mm,
+        title="EcoSync - Personal Carbon Footprint Report", author="EcoSync",
+    )
+    story = []
+
+    # ---- Header banner ----
+    header = Table(
+        [[Paragraph("EcoSync", st_["title"])],
+         [Paragraph("Personal Carbon Footprint Report", st_["sub"])],
+         [Paragraph(f"Generated: {res.get('generated', '')}", st_["sub"])]],
+        colWidths=[page_w],
+    )
+    header.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), PDF_DARK),
+        ("LEFTPADDING", (0, 0), (-1, -1), 14),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 14),
+        ("TOPPADDING", (0, 0), (0, 0), 14),
+        ("BOTTOMPADDING", (0, -1), (-1, -1), 14),
+        ("TOPPADDING", (0, 1), (-1, -1), 1),
+        ("BOTTOMPADDING", (0, 0), (-1, -2), 1),
+        ("LINEBELOW", (0, -1), (-1, -1), 3, PDF_LIME),
+    ]))
+    story.append(header)
+    story.append(Spacer(1, 10))
+
+    # ---- Score + key numbers ----
+    score_cell = [
+        Paragraph(f'<font color="{score_colour}">{score}</font>', st_["score_num"]),
+        Paragraph("out of 100", st_["score_lbl"]),
+        Paragraph(f"<b>{clean_label(label)}</b>", st_["score_lbl"]),
+    ]
+    kpis = [
+        [Paragraph("Yearly footprint", st_["cell"]),
+         Paragraph(f"<b>{total:,.0f} kg</b> ({total / 1000:.2f} tonnes {CO2})", st_["cell"])],
+        [Paragraph("India per-capita average", st_["cell"]),
+         Paragraph(f"<b>{INDIA_AVERAGE:,} kg</b> {CO2} / year", st_["cell"])],
+        [Paragraph("You vs India average", st_["cell"]),
+         Paragraph(f"<b>{ratio:.2f}x</b>", st_["cell"])],
+        [Paragraph("Trees needed to offset", st_["cell"]),
+         Paragraph(f"<b>{trees:,}</b> trees / year", st_["cell"])],
+    ]
+    kpi_w = page_w - 45 * mm - 22  # minus the summary cell's left/right padding
+    kpi_tbl = Table(kpis, colWidths=[kpi_w * 0.45, kpi_w * 0.55])
+    kpi_tbl.setStyle(TableStyle([
+        ("LINEBELOW", (0, 0), (-1, -2), 0.5, PDF_LINE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    summary = Table([[score_cell, kpi_tbl]], colWidths=[45 * mm, page_w - 45 * mm])
+    summary.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), PDF_LIGHT),
+        ("BOX", (0, 0), (-1, -1), 0.8, PDF_LINE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    story.append(summary)
+
+    # Status line
+    if total <= INDIA_AVERAGE:
+        status = (f"<b>Eco-Champion!</b> Your footprint ({total:,.0f} kg/yr) is at or below the "
+                  f"India average ({INDIA_AVERAGE:,} kg/yr).")
+    else:
+        status = (f"<b>Heads up:</b> your footprint is {ratio:.1f}x the India average "
+                  f"({INDIA_AVERAGE:,} kg/yr). See the top 3 improvement areas below.")
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(status, st_["body"]))
+
+    # ---- Emissions breakdown ----
+    story.append(Paragraph(f"Emissions Breakdown (kg {CO2} / year)", st_["h2"]))
+    story.append(_pdf_bar_chart(categories, total, page_w))
+    story.append(Spacer(1, 6))
+
+    rows = [[Paragraph("Category", st_["head"]),
+             Paragraph(f"Yearly {CO2} (kg)", st_["head"]),
+             Paragraph("Share", st_["head"])]]
+    for name, v in categories.items():
+        share = (v / total * 100) if total > 0 else 0
+        rows.append([Paragraph(name, st_["cell"]),
+                     Paragraph(f"{v:,.1f}", st_["cell"]),
+                     Paragraph(f"{share:.1f}%", st_["cell"])])
+    rows.append([Paragraph("TOTAL", st_["cellb"]),
+                 Paragraph(f"{total:,.1f}", st_["cellb"]),
+                 Paragraph("100.0%" if total > 0 else "0.0%", st_["cellb"])])
+    breakdown = Table(rows, colWidths=[page_w * 0.45, page_w * 0.3, page_w * 0.25], repeatRows=1)
+    breakdown.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), PDF_ACCENT),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, PDF_LIGHT]),
+        ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#e3efe6")),
+        ("LINEABOVE", (0, -1), (-1, -1), 1, PDF_ACCENT),
+        ("GRID", (0, 0), (-1, -1), 0.4, PDF_LINE),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(breakdown)
+
+    # ---- Your inputs ----
+    story.append(Paragraph("Your Inputs", st_["h2"]))
+    input_rows = [
+        ("Electricity", f"{inputs['kwh']:,.1f} kWh / month"),
+        ("LPG cylinders", f"{inputs['cylinders']:,.1f} / month"),
+        ("People at home", f"{inputs['people']}"),
+        ("Primary travel mode", clean_label(inputs["mode"])),
+        ("Weekly distance", f"{inputs['km_per_week']} km"),
+        ("Round-trip flights", f"{inputs['flights']:,.1f} / year"),
+        ("Diet", clean_label(inputs["diet"])),
+        ("Recycling level", clean_label(inputs["recycle"])),
+        ("Shopping spend", f"INR {inputs['shopping_rs']:,.0f} / month"),
+    ]
+    inp_tbl = Table(
+        [[Paragraph(k, st_["cell"]), Paragraph(v, st_["cellb"])] for k, v in input_rows],
+        colWidths=[page_w * 0.45, page_w * 0.55],
+    )
+    inp_tbl.setStyle(TableStyle([
+        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, PDF_LIGHT]),
+        ("GRID", (0, 0), (-1, -1), 0.4, PDF_LINE),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(inp_tbl)
+
+    # ---- Top 3 recommendations ----
+    story.append(Paragraph("Top 3 Areas to Improve", st_["h2"]))
     top3 = sorted(categories, key=categories.get, reverse=True)[:3]
     for rank, name in enumerate(top3, start=1):
-        if categories[name] > 0:
-            lines.append(f"#{rank} {name} ({categories[name]:,.0f} kg)")
-            for b in CATEGORY_META[name]["bullets"]:
-                lines.append(f"    - {b.replace('**', '')}")
-    lines.append("")
-    lines.append("Note: This is an estimate based on average emission factors.")
-    lines.append("See the Methodology and Sources pages in the app for details.")
-    lines.append("=" * 62)
-    return "\n".join(lines).encode("utf-8")
+        kg = categories[name]
+        if kg <= 0:
+            continue
+        meta = CATEGORY_META[name]
+        share = (kg / total * 100) if total > 0 else 0
+        bullets = "<br/>".join(f"&bull; {md_bold(b.replace('&', '&amp;'))}" for b in meta["bullets"])
+        tip = Table(
+            [[Paragraph(f"#{rank}  {name} - {kg:,.0f} kg {CO2}/yr ({share:.0f}%)", st_["tip_title"])],
+             [Paragraph(bullets, st_["body"])]],
+            colWidths=[page_w],
+        )
+        tip.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), PDF_LIGHT),
+            ("LINEBEFORE", (0, 0), (0, -1), 4, colors.HexColor(meta["color"])),
+            ("BOX", (0, 0), (-1, -1), 0.4, PDF_LINE),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(KeepTogether([tip, Spacer(1, 6)]))
+
+    # ---- How the score works + note ----
+    story.append(Paragraph("About the Sustainability Score", st_["h2"]))
+    story.append(Paragraph(
+        f"Score = 100 x (1 - Total / {SCORE_CEILING:,} kg), limited to 0-100. "
+        "A score of 100 means zero emissions, 50 equals the India per-capita average, "
+        "and 0 means twice the India average or more.", st_["body"]))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(
+        "Note: This report is an estimate based on rounded average emission factors. "
+        "It is meant for awareness and comparison, not for official carbon accounting. "
+        "See the Methodology and Sources pages in the app for details.", st_["note"]))
+
+    doc.build(story, onFirstPage=_pdf_footer, onLaterPages=_pdf_footer)
+    return buf.getvalue()
 
 
 def categories_df(categories):
@@ -889,7 +1046,7 @@ html("""
         <span class="chip">📐 <b>6</b> emission categories</span>
         <span class="chip">🇮🇳 India-calibrated factors</span>
         <span class="chip">⚡ Live what-if simulator</span>
-        <span class="chip">📥 Downloadable report</span>
+        <span class="chip">📥 Downloadable PDF report</span>
     </div>
 </div>
 """)
@@ -1110,32 +1267,18 @@ elif st.session_state["page"] == "results":
             </div>
             """)
 
-    # Download Report
+    # Download Report (PDF only)
     st.markdown("### 📥 Download your emission report")
-    st.caption(
-        "Tally your total yourself: the **CSV** opens in Excel / Google Sheets "
-        "(category rows add up to the TOTAL row). The **TXT** is a printable summary."
-    )
+    st.caption("Get a printable **PDF** summary of your inputs, emissions, score and top recommendations.")
     stamp = datetime.now(IST).strftime("%Y%m%d_%H%M")
-    d1, d2 = st.columns(2)
-    with d1:
-        st.download_button(
-            "📊 Download CSV (for tally)",
-            data=build_csv_report(inputs, res),
-            file_name=f"ecosync_report_{stamp}.csv",
-            mime="text/csv",
-            key="dl_csv",
-            **DL
-        )
-    with d2:
-        st.download_button(
-            "📄 Download Text Report",
-            data=build_text_report(inputs, res),
-            file_name=f"ecosync_report_{stamp}.txt",
-            mime="text/plain",
-            key="dl_txt",
-            **DL
-        )
+    st.download_button(
+        "📄 Download PDF Report",
+        data=build_pdf_report(inputs, res),
+        file_name=f"ecosync_report_{stamp}.pdf",
+        mime="application/pdf",
+        key="dl_pdf",
+        **DL
+    )
 
     # Bottom Page Navigation Buttons
     st.divider()
